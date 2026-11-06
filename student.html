@@ -362,23 +362,25 @@ fieldset.slots legend{font-weight:600;margin-bottom:var(--s2);padding:0}
 
 var KEY = 'surcms.db.v2';
 var CAMPUS = { lat: 0.3347, lng: 32.5678 };
-var FACULTIES = ['Faculty of Computing and Informatics', 'Faculty of Business', 'Faculty of Education', 'Faculty of Science'];
+var FACULTIES = ['Faculty of Computing and Information Science', 'Faculty of Management Science', 'Faculty of Education', 'Faculty of Medicine', 'Faculty of Law', 'Faculty of Science', 'Faculty of Social Sciences', 'Faculty of Arts and Humanities', 'Faculty of Engineering', 'Faculty of Agriculture and Environmental Sciences'];
 var DEPTS = [
-  { key: 'Finance', needs: 'Tuition payment or an approved payment plan is on record.' },
+  { key: 'Finance', needs: 'Tuition payment.' },
   { key: 'University Hospital', needs: 'Medical registration is complete.' },
   { key: 'Faculty', needs: 'Admission and programme documents are confirmed by your faculty.' },
   { key: 'Sports', needs: 'Sports and recreation registration is complete.' }
 ];
 var SLOTS = ['08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM'];
-var BASE_BOOKED = { '08:00 AM': 18, '09:00 AM': 24, '10:00 AM': 8, '11:00 AM': 25, '01:00 PM': 19, '02:00 PM': 4 };
+var BASE_BOOKED = { '08:00 AM': 100, '09:00 AM': 100, '10:00 AM': 80, '11:00 AM': 80, '01:00 PM': 80, '02:00 PM': 100 };
+
 var LANDMARKS = [
   { label: 'Main campus gate', lat: 0.3340, lng: 32.5675 },
-  { label: 'Wandegeya market', lat: 0.3341, lng: 32.5740 },
-  { label: 'Kamwokya', lat: 0.3380, lng: 32.5880 },
-  { label: 'Kololo', lat: 0.3290, lng: 32.5900 },
-  { label: 'Ntinda', lat: 0.3530, lng: 32.6130 },
-  { label: 'Entebbe town', lat: 0.0512, lng: 32.4637 }
+  { label: 'Ayere', lat: 0.3341, lng: 32.5740 },
+  { label: 'Barapwo', lat: 0.3380, lng: 32.5880 },
+  { label: 'Odokomiti', lat: 0.3290, lng: 32.5900 },
+  { label: 'Amuca', lat: 0.3530, lng: 32.6130 },
+  { label: 'Teaching hospital', lat: 0.0512, lng: 32.4637 }
 ];
+
 var WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 var MO = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -461,7 +463,7 @@ function seed() {
     blank({ id: 's1', name: 'Amina N. Okello', regNo: '26/U/BCS/001', email: 'amina.okello@student.university.ac.ug', phone: '+256 700 123 456', programme: 'Bachelor of Computer Science', password: pw,
       log: [{ t: T, x: 'Account created' }] }),
     blank({ id: 's2', name: 'Brian Kato', regNo: '26/U/BIT/014', email: 'brian.kato@student.university.ac.ug', phone: '+256 772 410 118', programme: 'Bachelor of Information Technology', password: pw,
-      loc: { ok: true, km: 1.8, label: 'Wandegeya market' }, appointment: { date: '2026-11-05', time: '09:00 AM', ref: 'SUR-2026-4172' },
+      loc: { ok: true, km: 1.8, label: 'Ayere market' }, appointment: { date: '2026-11-05', time: '09:00 AM', ref: 'SUR-2026-4172' },
       clear: { 'Finance': 'approved', 'University Hospital': 'approved', 'Faculty': 'pending', 'Sports': 'pending' },
       log: [{ t: T + 5 * h, x: 'University Hospital clearance approved' }, { t: T + 3 * h, x: 'Finance clearance approved' }, { t: T + h, x: 'Appointment booked for Thu 5 Nov at 09:00 AM' }, { t: T, x: 'Account created' }] }),
     blank({ id: 's3', name: 'Grace Namubiru', regNo: '26/U/BBA/022', email: 'grace.namubiru@student.university.ac.ug', phone: '+256 701 884 205', faculty: FACULTIES[1], programme: 'Bachelor of Business Administration', password: pw,
@@ -478,7 +480,7 @@ function seed() {
       remarks: { 'Finance': 'The first instalment is not yet on record. Bring your bank slip to the Finance office.' },
       log: [{ t: T + 4 * h, x: 'Finance returned your clearance with a note' }, { t: T + 2 * h, x: 'University Hospital clearance approved' }, { t: T, x: 'Appointment booked for Fri 6 Nov at 01:00 PM' }] }),
     blank({ id: 's6', name: 'Peter Mugisha', regNo: '26/U/SCI/005', email: 'peter.mugisha@student.university.ac.ug', phone: '+256 706 219 330', faculty: FACULTIES[3], programme: 'Bachelor of Science (Chemistry)', password: pw,
-      loc: { ok: true, km: 1.1, label: 'Wandegeya market' }, appointment: { date: '2026-11-04', time: '02:00 PM', ref: 'SUR-2026-1187' },
+      loc: { ok: true, km: 1.1, label: 'Ayere market' }, appointment: { date: '2026-11-04', time: '02:00 PM', ref: 'SUR-2026-1187' },
       clear: all, checkedIn: true, verified: true, verifyNote: 'Original documents inspected and details matched.', approved: true,
       log: [{ t: T + 4 * h, x: 'Registration approved' }, { t: T + 3 * h, x: 'Documents verified by the registrar' }, { t: T + 2 * h, x: 'Checked in at the registry desk' }] }),
     blank({ id: 's7', name: 'Sarah Nakato', regNo: '26/U/BCS/017', email: 'sarah.nakato@student.university.ac.ug', phone: '+256 775 640 913', programme: 'Bachelor of Computer Science', password: pw,
@@ -589,20 +591,20 @@ function signIn(role, id, pw) {
   if (role === 'student') {
     var s = D.students.filter(function (x) { return norm(x.email) === norm(id) || norm(x.regNo) === norm(id); })[0];
     if (!s) return { ok: false, error: 'No student account matches that registration number or email.' };
-    if (s.password !== pw) return { ok: false, error: 'That password is not correct. Check it and try again.' };
+    if (s.password !== pw) return { ok: false, error: 'Incorrect password or email' };
     D.session = { role: 'student', id: s.id }; D.lastStudentId = s.id; save();
     return { ok: true, to: 'student.html' };
   }
   var t = D.staff.filter(function (x) { return norm(x.email) === norm(id); })[0];
   if (!t) return { ok: false, error: 'No staff account matches that email.' };
-  if (t.password !== pw) return { ok: false, error: 'That password is not correct. Check it and try again.' };
+  if (t.password !== pw) return { ok: false, error: 'Incorrect password or email.' };
   D.session = { role: 'staff', id: t.id }; save();
   return { ok: true, to: 'admin.html' };
 }
 function register(f) {
   var e = {};
   if (!f.name.trim()) e.name = 'Enter your full name.';
-  if (!f.regNo.trim()) e.regNo = 'Enter the registration number on your admission letter.';
+  if (!f.regNo.trim()) e.regNo = 'Enter the registration number';
   else if (D.students.some(function (s) { return norm(s.regNo) === norm(f.regNo); })) e.regNo = 'An account already exists for this registration number.';
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) e.email = 'Enter a valid email address.';
   else if (D.students.some(function (s) { return norm(s.email) === norm(f.email); })) e.email = 'An account already exists for this email.';
@@ -3221,10 +3223,10 @@ var qrcode = function() {
     s.loc = { ok: km <= A.D().settings.radius, km: Math.round(km * 10) / 10, label: label };
     A.log(s, 'Location checked: ' + s.loc.km + ' km from campus');
     A.save(); rerender();
-    A.toast(s.loc.ok ? 'Location confirmed. Choose a date and time.' : 'You are outside the booking area.');
+    A.toast(s.loc.ok ? 'Location confirmed. Choose a date and time.' : 'You are outside university.');
   }
   function geo(btn) {
-    if (!navigator.geolocation) { A.toast('Location is not available in this browser. Choose your nearest place instead.'); return; }
+    if (!navigator.geolocation) { A.toast('Location is not available. Choose your nearest place instead.'); return; }
     btn.disabled = true; btn.textContent = 'Checking location';
     navigator.geolocation.getCurrentPosition(function (p) {
       setLoc(A.haversine(p.coords.latitude, p.coords.longitude, A.CAMPUS.lat, A.CAMPUS.lng), 'Your location');
@@ -3277,7 +3279,7 @@ var qrcode = function() {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = 'Enter a valid email address.'; return; }
       if (A.D().students.some(function (x) { return x.id !== s.id && A.norm(x.email) === A.norm(email); })) { err.textContent = 'Another account already uses that email.'; return; }
       s.name = name; s.email = email; s.phone = f.elements.phone.value.trim(); s.faculty = f.elements.faculty.value; s.programme = f.elements.programme.value.trim();
-      A.save(); A.setUser(s.name, s.regNo); err.textContent = ''; A.toast('Your details are saved.');
+      A.save(); A.setUser(s.name, s.regNo); err.textContent = ''; A.toast('Details Saved.');
     }
   });
 })();
