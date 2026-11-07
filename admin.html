@@ -572,7 +572,19 @@ function steps(s) {
 }
 function progress(s) { return steps(s).filter(function (x) { return x.done; }).length; }
 function log(s, x) { s.log.unshift({ t: Date.now(), x: x }); if (s.log.length > 30) s.log.length = 30; }
+function timeMinutes(value) {
+  var parts = value.split(' '), hm = parts[0].split(':'), hour = +hm[0], minute = +hm[1];
+  if (parts[1]) hour = hour % 12 + (parts[1] === 'PM' ? 12 : 0);
+  return hour * 60 + minute;
+}
+function isBlocked(date, time) {
+  var slot = timeMinutes(time);
+  return (D.settings.blockedTimes || []).some(function (block) {
+    return block.date === date && slot >= timeMinutes(block.start) && slot < timeMinutes(block.end);
+  });
+}
 function placesLeft(date, time) {
+  if (isBlocked(date, time)) return 0;
   var n = D.settings.capacity - (BASE_BOOKED[time] || 0);
   D.students.forEach(function (s) { if (s.appointment && s.appointment.date === date && s.appointment.time === time) n--; });
   return Math.max(0, n);
@@ -735,7 +747,7 @@ function router(routes, def) {
 window.App = {
   D: function () { return D; }, save: save, go: go, esc: esc, icon: icon, initials: initials, first: first, norm: norm, $: $,
   fmtDate: fmtDate, fmtStamp: fmtStamp, regDates: regDates, haversine: haversine,
-  CAMPUS: CAMPUS, FACULTIES: FACULTIES, DEPTS: DEPTS, SLOTS: SLOTS, LANDMARKS: LANDMARKS,
+  CAMPUS: CAMPUS, FACULTIES: FACULTIES, DEPTS: DEPTS, SLOTS: SLOTS, LANDMARKS: LANDMARKS, isBlocked: isBlocked,
   student: student, me: me, staffMe: staffMe, clearedCount: clearedCount, returnedDepts: returnedDepts, ready: ready,
   stage: stage, steps: steps, progress: progress, log: log, placesLeft: placesLeft, genRef: genRef,
   signIn: signIn, register: register, signOut: signOut, switchPortal: switchPortal, guard: guard,
@@ -889,6 +901,11 @@ window.App = {
   /* ---------- settings ---------- */
   function settings() {
     var s = A.D().settings;
+    var dates = A.regDates(), blocks = s.blockedTimes || [];
+    var dateOptions = dates.map(function (d) { return '<option value="' + d + '">' + A.fmtDate(d) + '</option>'; }).join('');
+    var blockRows = blocks.length ? blocks.map(function (b, i) {
+      return '<li><span><b>' + A.fmtDate(b.date) + '</b><br>' + esc(b.start) + '–' + esc(b.end) + '</span><button class="btn btn-danger btn-sm" type="button" data-act="remove-block" data-index="' + i + '">Remove</button></li>';
+    }).join('') : '<li class="empty">No unavailable times have been set.</li>';
     return '<header class="ph"><h1>Settings</h1><p>These rules apply to every student booking from now on.</p></header>' +
       '<section class="panel" style="max-width:640px"><form data-form="settings" novalidate>' +
       '<div class="grid2"><div class="field"><label for="st-o">Registration opens</label><input id="st-o" name="opens" type="date" value="' + s.opens + '"></div>' +
@@ -896,7 +913,14 @@ window.App = {
       '<div class="field"><label for="st-cap">Places per time slot</label><input id="st-cap" name="capacity" type="number" min="1" max="200" value="' + s.capacity + '"></div>' +
       '<div class="field"><label for="st-g">Late arrival allowance (minutes)</label><input id="st-g" name="grace" type="number" min="0" max="120" value="' + s.grace + '"></div>' +
       '<div class="field"><label for="st-r">Booking radius (km)</label><input id="st-r" name="radius" type="number" min="1" max="50" step="0.5" value="' + s.radius + '"></div></div>' +
-      '<p class="err-line" id="st-err" role="alert"></p><button class="btn btn-primary" type="submit">Save settings</button></form></section>';
+      '<p class="err-line" id="st-err" role="alert"></p><button class="btn btn-primary" type="submit">Save settings</button></form></section>' +
+      '<section class="panel" style="max-width:640px;margin-top:20px"><h2>Unavailable appointment times</h2>' +
+      '<p class="desc">Block appointment slots whose start time falls within a date and time range. The end time is not included. Existing appointments stay confirmed.</p>' +
+      '<form data-form="block" class="inline-form"><div class="field"><label for="block-date">Date</label><select id="block-date" name="date">' + dateOptions + '</select></div>' +
+      '<div class="field"><label for="block-start">From</label><input id="block-start" name="start" type="time" required></div>' +
+      '<div class="field"><label for="block-end">Until (exclusive)</label><input id="block-end" name="end" type="time" required></div>' +
+      '<button class="btn btn-primary" type="submit">Block time</button></form>' +
+      '<p class="err-line" id="block-err" role="alert"></p><ul class="queue block-list">' + blockRows + '</ul></section>';
   }
 
   var rerender = A.router({ overview: overview, students: students, clearances: clearances, appointments: appointments, settings: settings }, 'overview');
@@ -926,6 +950,12 @@ window.App = {
     if (!b) return;
     var a = b.dataset.act;
     if (a === 'approve' || a === 'return') return decide(b.closest('.dept-act'), a);
+    if (a === 'remove-block') {
+      var blocks = A.D().settings.blockedTimes || [], index = Number(b.dataset.index);
+      if (index < 0 || index >= blocks.length || Math.floor(index) !== index) return;
+      blocks.splice(index, 1); A.D().settings.blockedTimes = blocks; A.save(); rerender(); A.toast('Unavailable time removed.');
+      return;
+    }
     var s = A.student(b.dataset.id);
     if (!s) return;
     if (a === 'checkin') checkIn(s);
@@ -965,6 +995,15 @@ window.App = {
       var st = A.D().settings;
       st.opens = v.opens.value; st.closes = v.closes.value; st.capacity = cap; st.grace = gr; st.radius = rad;
       A.save(); err.textContent = ''; A.toast('Settings saved.');
+    } else if (f.dataset.form === 'block') {
+      var v = f.elements, err = A.$('block-err'), date = v.date.value, start = v.start.value, end = v.end.value;
+      if (A.regDates().indexOf(date) < 0 || !start || !end || start >= end) { err.textContent = 'Choose a registration date and a valid time range where the end is after the start.'; return; }
+      var blocks = A.D().settings.blockedTimes || [];
+      if (blocks.some(function (block) { return block.date === date && start < block.end && end > block.start; })) {
+        err.textContent = 'This time range overlaps an existing block for that date.'; return;
+      }
+      blocks.push({ date: date, start: start, end: end });
+      A.D().settings.blockedTimes = blocks; A.save(); rerender(); A.toast('Unavailable time saved.');
     }
   });
 })();

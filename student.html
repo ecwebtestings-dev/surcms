@@ -574,7 +574,19 @@ function steps(s) {
 }
 function progress(s) { return steps(s).filter(function (x) { return x.done; }).length; }
 function log(s, x) { s.log.unshift({ t: Date.now(), x: x }); if (s.log.length > 30) s.log.length = 30; }
+function timeMinutes(value) {
+  var parts = value.split(' '), hm = parts[0].split(':'), hour = +hm[0], minute = +hm[1];
+  if (parts[1]) hour = hour % 12 + (parts[1] === 'PM' ? 12 : 0);
+  return hour * 60 + minute;
+}
+function isBlocked(date, time) {
+  var slot = timeMinutes(time);
+  return (D.settings.blockedTimes || []).some(function (block) {
+    return block.date === date && slot >= timeMinutes(block.start) && slot < timeMinutes(block.end);
+  });
+}
 function placesLeft(date, time) {
+  if (isBlocked(date, time)) return 0;
   var n = D.settings.capacity - (BASE_BOOKED[time] || 0);
   D.students.forEach(function (s) { if (s.appointment && s.appointment.date === date && s.appointment.time === time) n--; });
   return Math.max(0, n);
@@ -737,7 +749,7 @@ function router(routes, def) {
 window.App = {
   D: function () { return D; }, save: save, go: go, esc: esc, icon: icon, initials: initials, first: first, norm: norm, $: $,
   fmtDate: fmtDate, fmtStamp: fmtStamp, regDates: regDates, haversine: haversine,
-  CAMPUS: CAMPUS, FACULTIES: FACULTIES, DEPTS: DEPTS, SLOTS: SLOTS, LANDMARKS: LANDMARKS,
+  CAMPUS: CAMPUS, FACULTIES: FACULTIES, DEPTS: DEPTS, SLOTS: SLOTS, LANDMARKS: LANDMARKS, isBlocked: isBlocked,
   student: student, me: me, staffMe: staffMe, clearedCount: clearedCount, returnedDepts: returnedDepts, ready: ready,
   stage: stage, steps: steps, progress: progress, log: log, placesLeft: placesLeft, genRef: genRef,
   signIn: signIn, register: register, signOut: signOut, switchPortal: switchPortal, guard: guard,
@@ -3106,8 +3118,8 @@ var qrcode = function() {
   }
   function slotItems(date) {
     return A.SLOTS.map(function (t) {
-      var left = A.placesLeft(date, t);
-      return '<label class="slot' + (left <= 0 ? ' full' : '') + '"><input type="radio" name="time" value="' + t + '"' + (left <= 0 ? ' disabled' : '') + '><b>' + t + '</b><span>' + (left <= 0 ? 'Full' : left + ' places left') + '</span></label>';
+      var blocked = A.isBlocked(date, t), left = A.placesLeft(date, t);
+      return '<label class="slot' + (left <= 0 ? ' full' : '') + '"><input type="radio" name="time" value="' + t + '"' + (left <= 0 ? ' disabled' : '') + '><b>' + t + '</b><span>' + (blocked ? 'Unavailable' : left <= 0 ? 'Full' : left + ' places left') + '</span></label>';
     }).join('');
   }
   function locationPanel(s) {
@@ -3268,6 +3280,7 @@ var qrcode = function() {
     } else if (kind === 'book') {
       var date = f.elements.date.value, ch = f.querySelector('input[name=time]:checked');
       if (!ch) { A.toast('Choose a time before you confirm.'); return; }
+      if (A.isBlocked(date, ch.value)) { A.toast('That time is unavailable. Choose another appointment.'); rerender(); return; }
       if (A.placesLeft(date, ch.value) <= 0) { A.toast('That slot has just filled up. Choose another time.'); rerender(); return; }
       s.appointment = { date: date, time: ch.value, ref: A.genRef() };
       A.log(s, 'Appointment booked for ' + A.fmtDate(date, true) + ' at ' + ch.value);
